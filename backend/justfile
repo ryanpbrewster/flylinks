@@ -3,3 +3,6 @@ build-image:
 
 run-container: build-image
 	docker run --rm --init -it rpb.dev/flylinks-backend
+
+deploy:
+	fly deploy
