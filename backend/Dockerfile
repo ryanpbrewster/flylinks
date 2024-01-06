@@ -15,4 +15,8 @@ RUN cargo build --release --bin server
 FROM docker.io/debian:stable-slim AS runtime
 WORKDIR app
 COPY --from=builder /app/target/release/server /usr/local/bin
-ENTRYPOINT ["/usr/local/bin/server"]
+ENTRYPOINT [ \
+	"/usr/local/bin/server", \
+	"--address=[::]:8080", \
+	"--db=/tmp/flylinks.db" \
+]

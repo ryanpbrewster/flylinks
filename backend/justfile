@@ -1,0 +1,5 @@
+build-image:
+	docker build . --tag rpb.dev/flylinks-backend
+
+run-container: build-image
+	docker run --rm --init -it rpb.dev/flylinks-backend
