@@ -17,11 +17,14 @@ use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::net::TcpListener;
-use tracing::info;
+use tracing::{info, info_span};
+use tracing_subscriber::fmt::format::FmtSpan;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt().init();
+    tracing_subscriber::fmt()
+        .with_span_events(FmtSpan::CLOSE)
+        .init();
     let args = Args::try_parse()?;
 
     info!("opening database {:?}...", args.db);
@@ -45,18 +48,24 @@ struct Persistence {
     conn: rusqlite::Connection,
 }
 impl Persistence {
+    #[tracing::instrument]
     fn open(path: PathBuf) -> anyhow::Result<Self> {
         let mut conn = rusqlite::Connection::open(path)?;
         schema::ensure_schema(&mut conn)?;
         Ok(Self { conn })
     }
 
+    #[tracing::instrument(skip(self))]
     pub fn list_links(&mut self, namespace: String) -> anyhow::Result<Vec<Link>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT short_form, long_form, created_at FROM links WHERE namespace = ?")?;
-        let links: Vec<Link> = stmt
-            .query_map([namespace], |row| {
+        let mut stmt = {
+            let _span = info_span!("prepare_statement").entered();
+            self.conn.prepare(
+                "SELECT short_form, long_form, created_at FROM links WHERE namespace = ?",
+            )?
+        };
+        let links: Vec<Link> = {
+            let _span = info_span!("query_map").entered();
+            stmt.query_map([namespace], |row| {
                 let link: Link = Link {
                     short_form: row.get(0)?,
                     long_form: row.get(1)?,
@@ -64,20 +73,26 @@ impl Persistence {
                 };
                 Ok(link)
             })?
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?
+        };
         Ok(links)
     }
 
+    #[tracing::instrument(skip(self))]
     pub fn get_link(
         &mut self,
         namespace: String,
         short_form: String,
     ) -> anyhow::Result<Option<Link>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT long_form, created_at FROM links WHERE namespace = ? AND short_form = ?",
-        )?;
-        let links: Option<Link> = stmt
-            .query_row([namespace, short_form.clone()], |row| {
+        let mut stmt = {
+            let _span = info_span!("prepare_statement").entered();
+            self.conn.prepare(
+                "SELECT long_form, created_at FROM links WHERE namespace = ? AND short_form = ?",
+            )?
+        };
+        let links: Option<Link> = {
+            let _span = info_span!("query_row").entered();
+            stmt.query_row([namespace, short_form.clone()], |row| {
                 let link: Link = Link {
                     short_form,
                     long_form: row.get(0)?,
@@ -85,13 +100,17 @@ impl Persistence {
                 };
                 Ok(link)
             })
-            .optional()?;
+            .optional()?
+        };
         Ok(links)
     }
 
+    #[tracing::instrument(skip(self, link))]
     pub fn create_link(&mut self, namespace: String, link: Link) -> anyhow::Result<()> {
-        let mut stmt = self.conn.prepare(
-            "
+        let mut stmt = {
+            let _span = info_span!("prepare_statement").entered();
+            self.conn.prepare(
+                "
                 INSERT INTO links (namespace, short_form, long_form, created_at)
                 VALUES (?, ?, ?, ?)
                 ON CONFLICT (namespace, short_form)
@@ -99,8 +118,11 @@ impl Persistence {
                     long_form = excluded.long_form,
                     created_at = excluded.created_at
             ",
-        )?;
-        stmt.execute((namespace, link.short_form, link.long_form, link.created_at))?;
+            )?
+        };
+        info_span!("execute").in_scope(|| {
+            stmt.execute((namespace, link.short_form, link.long_form, link.created_at))
+        })?;
         Ok(())
     }
 }
