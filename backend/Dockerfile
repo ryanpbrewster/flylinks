@@ -14,9 +14,11 @@ COPY . .
 RUN cargo build --release --bin server
 
 FROM docker.io/debian:stable-slim AS runtime
+# We need to talk to AWS over TLS, so we need some baseline certificate authority info
+RUN apt-get update && apt-get install -y ca-certificates
 COPY --from=builder /flylinks/target/release/server /flylinks/bin/flylinks-backend
 ENTRYPOINT [                                             \
-    "/app/flylinks-backend",                             \
+    "/flylinks/bin/flylinks-backend",                    \
     "--s3-bucket=flylinks-us-west-2",                    \
     "--s3-region=us-west-2",                             \
     "--s3-path=flylinks.sqlite",                         \

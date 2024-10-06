@@ -6,11 +6,16 @@
 app = 'flylinks-backend-weathered-pond-9344'
 primary_region = 'ewr'
 
+kill_signal = "SIGTERM"
+kill_timeout = 30
+
 [build]
+  dockerfile = "Dockerfile"
 
 [[mounts]]
   source = 'flylinks_backend_data'
-  destination = '/data'
+  destination = '/flylinks/data'
+  initial_size = "30GB"
 
 [http_service]
   internal_port = 8080
