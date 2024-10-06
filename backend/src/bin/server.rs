@@ -8,7 +8,7 @@ use anyhow::{anyhow, Context};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Redirect},
     routing::{get, post},
     Json, Router,
 };
@@ -69,6 +69,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/links/:namespace", get(list_links))
         .route("/v1/links/:namespace", post(create_link))
         .route("/v1/links/:namespace/:short_form", get(get_link))
+        .route("/v1/reverse_lookup/:namespace", post(reverse_lookup))
+        .route("/v1/redirect/:namespace/:short_form", get(redirect_link))
         .with_state(state);
 
     info!("listening at {}...", args.address);
@@ -196,6 +198,28 @@ impl Persistence {
         Ok(links)
     }
 
+    #[tracing::instrument(skip(self))]
+    pub fn reverse_lookup(&self, namespace: String, long_form: String) -> anyhow::Result<Vec<Link>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = {
+            let _span = info_span!("prepare_statement").entered();
+            conn.prepare("SELECT short_form, long_form, created_at FROM links WHERE namespace = ? AND long_form = ?")?
+        };
+        let links: Vec<Link> = {
+            let _span = info_span!("query_map").entered();
+            stmt.query_map([namespace, long_form], |row| {
+                let link: Link = Link {
+                    short_form: row.get(0)?,
+                    long_form: row.get(1)?,
+                    created_at: row.get(2)?,
+                };
+                Ok(link)
+            })?
+            .collect::<Result<Vec<_>, _>>()?
+        };
+        Ok(links)
+    }
+
     #[tracing::instrument(skip(self, link))]
     pub fn create_link(&self, namespace: String, link: Link) -> anyhow::Result<()> {
         let conn = self.conn.lock().unwrap();
@@ -286,6 +310,33 @@ async fn get_link(
         return Err(anyhow!("no link {namespace}/{short_form}").into());
     };
     Ok(Json(link))
+}
+
+async fn redirect_link(
+    State(state): State<ServerState>,
+    Path((namespace, short_form)): Path<(String, String)>,
+) -> AppResult<Redirect> {
+    let Some(link) = state.get_link(namespace.clone(), short_form.clone())? else {
+        return Err(anyhow!("no link {namespace}/{short_form}").into());
+    };
+    Ok(Redirect::temporary(&link.long_form))
+}
+
+#[derive(Deserialize)]
+struct ReverseLookupRequest {
+    long_form: String,
+}
+#[derive(Serialize)]
+struct ReverseLookupResponse {
+    links: Vec<Link>,
+}
+async fn reverse_lookup(
+    State(state): State<ServerState>,
+    Path(namespace): Path<String>,
+    Json(ReverseLookupRequest { long_form }): Json<ReverseLookupRequest>,
+) -> AppResult<Json<ReverseLookupResponse>> {
+    let links = state.reverse_lookup(namespace.clone(), long_form.clone())?;
+    Ok(Json(ReverseLookupResponse { links }))
 }
 
 #[derive(Parser)]
