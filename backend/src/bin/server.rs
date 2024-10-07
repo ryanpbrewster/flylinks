@@ -8,7 +8,7 @@ use anyhow::{anyhow, Context};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::{IntoResponse, Redirect},
+    response::{IntoResponse, Redirect, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -64,13 +64,14 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     });
+    // It's important that `*short_form` is a wildcard capture so that we support keys with slashes in them
     let app = Router::new()
         .route("/", get(|| async { "Hello, World!" }))
         .route("/v1/links/:namespace", get(list_links))
         .route("/v1/links/:namespace", post(create_link))
-        .route("/v1/links/:namespace/:short_form", get(get_link))
+        .route("/v1/links/:namespace/*short_form", get(get_link))
         .route("/v1/reverse_lookup/:namespace", post(reverse_lookup))
-        .route("/v1/redirect/:namespace/:short_form", get(redirect_link))
+        .route("/v1/redirect/:namespace/*short_form+", get(redirect_link))
         .with_state(state);
 
     info!("listening at {}...", args.address);
@@ -199,7 +200,11 @@ impl Persistence {
     }
 
     #[tracing::instrument(skip(self))]
-    pub fn reverse_lookup(&self, namespace: String, long_form: String) -> anyhow::Result<Vec<Link>> {
+    pub fn reverse_lookup(
+        &self,
+        namespace: String,
+        long_form: String,
+    ) -> anyhow::Result<Vec<Link>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = {
             let _span = info_span!("prepare_statement").entered();
@@ -315,11 +320,11 @@ async fn get_link(
 async fn redirect_link(
     State(state): State<ServerState>,
     Path((namespace, short_form)): Path<(String, String)>,
-) -> AppResult<Redirect> {
+) -> AppResult<Response> {
     let Some(link) = state.get_link(namespace.clone(), short_form.clone())? else {
-        return Err(anyhow!("no link {namespace}/{short_form}").into());
+        return Ok(format!("no link for {namespace}/{short_form}").into_response());
     };
-    Ok(Redirect::temporary(&link.long_form))
+    Ok(Redirect::temporary(&link.long_form).into_response())
 }
 
 #[derive(Deserialize)]

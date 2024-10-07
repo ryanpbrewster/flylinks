@@ -2,10 +2,12 @@
   "name": "flylinks",
   "description": "flylinks: Chrome extensions for interacting with self-hosted golinks",
   "version": "1.0",
-  "manifest_version": 2,
-  "background": {"scripts":["background.js"]},
-  "browser_action": {
+  "manifest_version": 3,
+  "action": {
     "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "service_worker.js"
   },
   "icons": {
     "16": "icon16.png",
@@ -15,9 +17,10 @@
   },
   "permissions": [
     "activeTab",
-    "*://go/*",
-    "storage",
-    "webRequest",
-    "webRequestBlocking"
-  ]
+    "declarativeNetRequestFeedback",
+    "declarativeNetRequestWithHostAccess",
+    "nativeMessaging",
+    "storage"
+  ],
+  "host_permissions": ["<all_urls>"]
 }

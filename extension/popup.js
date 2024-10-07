@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   const existing = document.getElementById('existing');
-  chrome.runtime.sendMessage({ getKeys: true }, (keys) => {
-    keys.forEach((key) => {
+  chrome.runtime.sendMessage({ getKeys: true }, (resp) => {
+    resp.links.map((link) => link.short_form).forEach((key) => {
       const a = document.createElement('a');
       a.href = `https://go/${key}`;
       a.target = '_blank';
