@@ -1,7 +1,7 @@
 {
   "name": "flylinks",
   "description": "flylinks: Chrome extensions for interacting with self-hosted golinks",
-  "version": "1.0",
+  "version": "1.0.1",
   "manifest_version": 3,
   "action": {
     "default_popup": "popup.html"
