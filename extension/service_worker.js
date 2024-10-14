@@ -4,9 +4,13 @@ chrome.runtime.onInstalled.addListener((details) => {
   console.log("[ON_INSTALLED]", details);
 });
 
-chrome.declarativeNetRequest.onRuleMatchedDebug.addListener((details) => {
-  console.log("[ON_RULE_MATCHED", details);
-});
+if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
+  chrome.declarativeNetRequest.onRuleMatchedDebug.addListener((details) => {
+    console.log("[ON_RULE_MATCHED]", details);
+  });
+} else {
+  console.log("cannot add debug logging on declarative net request rule matching");
+}
 
 let namespace = null;
 function configureNamespace(newNamespace) {
